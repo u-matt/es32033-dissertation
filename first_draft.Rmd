@@ -42,7 +42,10 @@ anes_24_filtered <- anes_24_for_model %>% filter(turnout != -2 &
   mutate(distance_from_dem_libcon = abs(libconself - libcondem),
          distance_from_rep_libcon = abs(libconself - libconrep),
          distance_from_closest = pmin(distance_from_dem_libcon, distance_from_rep_libcon),
-         distance_from_furthest = pmax(distance_from_dem_libcon, distance_from_rep_libcon))
+         distance_from_furthest = pmax(distance_from_dem_libcon, distance_from_rep_libcon),
+         equidist = if_else(distance_from_closest == distance_from_furthest, TRUE, FALSE))
+
+sprintf('%d voters report themselves as equidistant', nrow(anes_24_filtered %>% filter(equidist == TRUE)))
 
 #remove invalid obs for the control variables
 anes_24_filtered_further <- anes_24_filtered %>% filter(between(age, 18, 100) &
@@ -61,6 +64,7 @@ anes_24_filtered_alt <- anes_24_for_model %>% filter(turnout != -2  &
 ```
 
 ```{r}
+
 ```
 
 
