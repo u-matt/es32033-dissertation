@@ -14,19 +14,45 @@ library(openxlsx)
 anes_24 <- read_csv('~/Documents/GitHub/es32033-dissertation/data/anes/anes_timeseries_2024_csv_20260519.csv')
 
 
-initial_vars <- c('V242095x', 'V241177', 'V241179', 'V241180', 'V241458x', 'V241465x', 'V241567x', 'V241551', 'V242438', 'V242437', 'V242436')
+initial_vars <- c('V242095x', 'V241177', 'V241179', 'V241180', 'V241458x', 'V241465x', 'V241567x', 'V241551', 'V242438', 'V242437', 'V242436') #main vars + controls
 
-anes_24_for_model <- anes_24 %>% select(all_of(initial_vars)) %>% rename(turnout = V242095x, # -2 = not reported
-                                                                         libconself = V241177, # 1-7 scale
-                                                                         libcondem = V241179, # as above
-                                                                         libconrep = V241180, #as above
-                                                                         age = V241458x, #-2 = NA, 80+ = 80 or older
-                                                                         education_lvl = V241465x, # 1-5 scale
-                                                                         income_bracket = V241567x, # 1-6 scale
-                                                                         gender = V241551, # 1 = man, 2 = woman
-                                                                         leftrightself = V242438, # 0-10 scale
-                                                                         leftrightdem = V242437, # 0-10 scale
-                                                                         leftrightrep = V242436 # 0-10 scale
+#rename for clarity according to codebook
+anes_24_for_model <- anes_24 %>% select(all_of(initial_vars)) %>% rename(
+  turnout = V242095x, # -2 = not reported
+  libconself = V241177, # 1-7 scale
+  libcondem = V241179, # as above
+  libconrep = V241180, #as above
+  age = V241458x, #-2 = NA, 80+ = 80 or older
+  education_lvl = V241465x, # 1-5 scale
+  income_bracket = V241567x, # 1-6 scale
+  gender = V241551, # 1 = man, 2 = woman
+  leftrightself = V242438, # 0-10 scale
+  leftrightdem = V242437, # 0-10 scale
+  leftrightrep = V242436 # 0-10 scale
 )
 ```
+
+```{r}
+#remove invalid obs for the core variables
+anes_24_filtered <- anes_24_for_model %>% filter(turnout != -2 &
+                                                   (between(libconself, 0, 7)) &
+                                                   (between(libcondem, 0, 7)) &
+                                                   (between(libconrep, 0, 7))
+                                                 )
+#remove invalid obs for the control variables
+anes_24_filtered_further <- anes_24_filtered %>% filter(between(age, 18, 100) &
+                                                          between(education_lvl, 0, 5) & 
+                                                          between(income_bracket, 0, 6) &
+                                                          between(gender, 0, 2)
+                                                        )
+
+#version for using the 0-10 rather than 1-7 scale
+anes_24_filtered_alt <- anes_24_for_model %>% filter(turnout != -2  &                                          
+                                                   between(leftrightself, 0, 10) &
+                                                   between(leftrightdem, 0, 10) &
+                                                   between(leftrightrep, 0, 10))
+```
+
+
+
 
