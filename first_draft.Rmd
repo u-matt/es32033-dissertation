@@ -33,12 +33,15 @@ anes_24_for_model <- anes_24 %>% select(all_of(initial_vars)) %>% rename(
 ```
 
 ```{r}
-#remove invalid obs for the core variables
+#remove invalid obs for the core variables and set up 'distance' variable
 anes_24_filtered <- anes_24_for_model %>% filter(turnout != -2 &
                                                    (between(libconself, 0, 7)) &
                                                    (between(libcondem, 0, 7)) &
                                                    (between(libconrep, 0, 7))
-                                                 )
+                                                 ) %>% 
+  mutate(distance_from_dem_libcon = libconself - libcondem,
+         distance_from_rep_libcon = libconself - libconrep)
+
 #remove invalid obs for the control variables
 anes_24_filtered_further <- anes_24_filtered %>% filter(between(age, 18, 100) &
                                                           between(education_lvl, 0, 5) & 
@@ -50,8 +53,16 @@ anes_24_filtered_further <- anes_24_filtered %>% filter(between(age, 18, 100) &
 anes_24_filtered_alt <- anes_24_for_model %>% filter(turnout != -2  &                                          
                                                    between(leftrightself, 0, 10) &
                                                    between(leftrightdem, 0, 10) &
-                                                   between(leftrightrep, 0, 10))
+                                                   between(leftrightrep, 0, 10)) %>% 
+  mutate(distance_from_dem_lr = leftrightself - leftrightdem,
+         distance_from_rep_lr = leftrightself - leftrightrep)
 ```
+
+```{r}
+
+
+```
+
 
 
 
