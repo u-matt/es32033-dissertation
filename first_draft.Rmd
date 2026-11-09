@@ -5,21 +5,24 @@ output: html_notebook
 
 ```{r}
 library(tidyverse)
-library(janitor)
 library(openxlsx)
 library(sandwich)
 library(lmtest)
+library(survey)
 ```
 
 
 ```{r}
 anes_24 <- read_csv('~/Documents/GitHub/es32033-dissertation/data/anes/anes_timeseries_2024_csv_20260519.csv')
+```
 
 
+```{r}
+#variables of interest for model
 initial_vars <- c('V240001', 'V242095x', 'V241177', 'V241179', 'V241180', 'V241458x', 'V241465x', 'V241566x', 'V241567x', 'V241551', 'V242438', 'V242437', 'V242436') #main vars + controls
 
 #rename for clarity according to codebook
-anes_24_for_model <- anes_24 %>% select(all_of(initial_vars)) %>% rename(
+anes_24_for_model <- anes_24 %>% rename(
   case_id = V240001, #unique identifier - for validation
   turnout = V242095x, # -2 = not reported
   libconself = V241177, # 1-7 scale
@@ -27,7 +30,7 @@ anes_24_for_model <- anes_24 %>% select(all_of(initial_vars)) %>% rename(
   libconrep = V241180, #as above
   age = V241458x, #-2 = NA, 80+ = 80 or older
   education_lvl = V241465x, # 1-5 scale
-  income_total = V241566x, #29 category variable 
+  income_total = V241566x, # 29 category variable 
   income_bracket = V241567x, # 1-6 scale
   gender = V241551, # 1 = man, 2 = woman
   leftrightself = V242438, # 0-10 scale
@@ -35,71 +38,96 @@ anes_24_for_model <- anes_24 %>% select(all_of(initial_vars)) %>% rename(
   leftrightrep = V242436 # 0-10 scale
 ) %>%
   mutate(
-    graduate = if_else(education_lvl == 4 | education_lvl == 5, 1, 0)
-  )
+    graduate = if_else(education_lvl == 4 | education_lvl == 5, 1, 0),
+    gender = factor(gender, levels = c(1, 2), labels = c('Male', 'Female'))
+         )  
 ```
 
+
 ```{r}
-#remove invalid obs for the core variables and set up 'distance' variable
-anes_24_filtered <- anes_24_for_model %>% filter(turnout != -2 &
-                                                   (between(libconself, 0, 7)) &
-                                                   (between(libcondem, 0, 7)) &
-                                                   (between(libconrep, 0, 7))
-                                                 ) %>% 
+# set up 'distance' variable
+anes_24_final<- anes_24_for_model %>% 
   mutate(distance_from_dem_libcon = abs(libconself - libcondem),
          distance_from_rep_libcon = abs(libconself - libconrep),
          distance_from_closest = pmin(distance_from_dem_libcon, distance_from_rep_libcon),
          distance_from_furthest = pmax(distance_from_dem_libcon, distance_from_rep_libcon),
-         equidist = if_else(distance_from_closest == distance_from_furthest, TRUE, FALSE))
+         equidist = if_else(distance_from_closest == distance_from_furthest, TRUE, FALSE),
+         #vars for using the 0-10 rather than 1-7 scale
+
+         distance_from_dem_lr = abs(leftrightself - leftrightdem),
+         distance_from_rep_lr = abs(leftrightself - leftrightrep),
+         distance_from_closest_alt = pmin(distance_from_dem_lr, distance_from_rep_lr),
+         distance_from_furthest_alt = pmax(distance_from_dem_lr, distance_from_rep_lr)
+         )
+         
 
 sprintf('%d voters report themselves as equidistant on the liberal - conservative scale', nrow(anes_24_filtered %>% filter(equidist == TRUE)))
 
-#remove invalid obs for the control variables
-anes_24_filtered_further <- anes_24_filtered %>% filter(between(age, 18, 100) &
-                                                          between(education_lvl, 0, 5) & 
-                                                          #between(income_bracket, 0, 6) &
-                                                          between(gender, 0, 2) &
-                                                          income_total > 0
-                                                        )
-
-#version for using the 0-10 rather than 1-7 scale
-anes_24_filtered_alt <- anes_24_for_model %>% filter(turnout != -2  &                                          
-                                                   between(leftrightself, 0, 10) &
-                                                   between(leftrightdem, 0, 10) &
-                                                   between(leftrightrep, 0, 10) &
-                                                   between(age, 18, 100) &
-                                                   between(education_lvl, 0, 5) &
-                                                   income_total > 0 &
-                                                   #between(income_bracket, 0, 6) &
-                                                   between(gender, 0, 2)
-                                                        ) %>%
-  mutate(distance_from_dem_lr = abs(leftrightself - leftrightdem),
-         distance_from_rep_lr = abs(leftrightself - leftrightrep),
-         distance_from_closest_alt = pmin(distance_from_dem_lr, distance_from_rep_lr),
-         distance_from_furthest_alt = pmax(distance_from_dem_lr, distance_from_rep_lr))
 ```
 
 ```{r}
-#most basic lpm without controls 
-basic_lpm <- lm(turnout ~ distance_from_closest + distance_from_furthest, data = anes_24_filtered)
-summary(basic_lpm)
-#heteroskedastic standard errors
-coeftest(basic_lpm, vcov = vcovHC(full_lpm, type = "HC1"))
+#setup survey weights as outlined in the codebook
+des <- svydesign(
+  ids = ~V240107c,
+  strata = ~V240107d,
+  weights = ~V240107a,
+  data = anes_24_final,
+  nest = TRUE
+)
 
+
+#make sure that filtering for invalid responses doesn't distort the weighting by specifying the subset we're interested in
+des_basic <- subset(des, turnout != -2 & between(libconself, 1, 7) & between(libcondem, 1, 7) & between(libconrep, 1, 7))
+
+
+des_controls <- subset(des, age >= 18 & 
+                         turnout != -2 & 
+                         !is.na(gender) & 
+                         income_total > 0 & 
+                         between(libconself, 1, 7) & between(libcondem, 1, 7) & between(libconrep, 1, 7))
+
+#as above using the 0-10 rather than 1-7 scale
+des_controls_alt <- subset(des, age >= 18 & 
+                             turnout != -2 & 
+                             !is.na(gender) & 
+                             income_total > 0 & 
+                             between(leftrightself, 1, 10) & between(leftrightrep, 1, 10) & between(leftrightdem, 1, 10))
+```
+
+
+```{r}
+#most basic lpm without controls 
+basic_lpm <- svyglm(turnout ~ distance_from_closest + distance_from_furthest, design = des_basic)
+summary(basic_lpm)
 
 #lpm with controls as in rivas
-
-full_lpm <- lm(turnout ~ distance_from_closest + distance_from_furthest + gender + graduate + income_total + age + I(age^2), data = anes_24_filtered_further)
-coeftest(full_lpm, vcov = vcovHC(full_lpm, type = "HC1"))
-
+full_lpm <- svyglm(turnout ~ distance_from_closest + distance_from_furthest + gender + graduate + income_total + age + I(age^2), design = des_controls)
+summary(full_lpm)
 
 #lpm with 0-10 rather than 1-7 scale
-full_lpm_alt <- lm(turnout ~ distance_from_closest_alt + distance_from_furthest_alt + gender + graduate + income_total + age + I(age^2), data = anes_24_filtered_alt)
+full_lpm_alt <- svyglm(turnout ~ distance_from_closest_alt + distance_from_furthest_alt + gender + graduate + income_total + age + I(age^2), design = des_controls_alt)
 summary(full_lpm_alt)
-coeftest(full_lpm_alt, vcov = vcovHC(full_lpm_alt, type = "HC1"))
 
 
 ```
+
+```{r}
+#version with validated voter turnout
+
+anes_24_validation <- read_csv('~/Documents/GitHub/es32033-dissertation/data/anes/anes_timeseries_2024_csv_VoterValidation.csv') %>% select(V240001, val_turnout24) %>% rename(case_id = V240001)
+
+```
+```{r}
+#create version with validation from voter records
+anes_24_final_validated <- anes_24_final %>% left_join(anes_24_validation, join_by(case_id)) %>%
+  mutate(validated = case_when(
+    val_turnout24 == 4 & turnout == 1 ~ TRUE,
+    val_turnout24 == 3 & turnout == 0 ~ TRUE,
+    .default = FALSE
+  ))
+
+```
+
 
 
 
