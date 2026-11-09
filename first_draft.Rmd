@@ -1,5 +1,5 @@
 ---
-title: "R Notebook"
+title: "first_draft.Rmd"
 output: html_notebook
 ---
 
@@ -75,29 +75,33 @@ anes_24_filtered_alt <- anes_24_for_model %>% filter(turnout != -2  &
                                                         ) %>%
   mutate(distance_from_dem_lr = abs(leftrightself - leftrightdem),
          distance_from_rep_lr = abs(leftrightself - leftrightrep),
-         distance_from_closest = pmin(distance_from_dem_lr, distance_from_rep_lr),
-         distance_from_furthest = pmax(distance_from_dem_lr, distance_from_rep_lr),)
+         distance_from_closest_alt = pmin(distance_from_dem_lr, distance_from_rep_lr),
+         distance_from_furthest_alt = pmax(distance_from_dem_lr, distance_from_rep_lr))
 ```
 
 ```{r}
 #most basic lpm without controls 
 basic_lpm <- lm(turnout ~ distance_from_closest + distance_from_furthest, data = anes_24_filtered)
 summary(basic_lpm)
+#heteroskedastic standard errors
+coeftest(basic_lpm, vcov = vcovHC(full_lpm, type = "HC1"))
+
 
 #lpm with controls as in rivas
 
 full_lpm <- lm(turnout ~ distance_from_closest + distance_from_furthest + gender + graduate + income_total + age + I(age^2), data = anes_24_filtered_further)
-summary(full_lpm)
-
-#heteroskedastic standard errors
 coeftest(full_lpm, vcov = vcovHC(full_lpm, type = "HC1"))
 
 
 #lpm with 0-10 rather than 1-7 scale
-full_lpm_alt <- lm(turnout ~ distance_from_closest + distance_from_furthest + gender + graduate + income_total + age + I(age^2), data = anes_24_filtered_further)
+full_lpm_alt <- lm(turnout ~ distance_from_closest_alt + distance_from_furthest_alt + gender + graduate + income_total + age + I(age^2), data = anes_24_filtered_alt)
+summary(full_lpm_alt)
+coeftest(full_lpm_alt, vcov = vcovHC(full_lpm_alt, type = "HC1"))
 
 
 ```
+
+
 
 
 
