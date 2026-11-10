@@ -30,7 +30,7 @@ anes_24_for_model <- anes_24 %>% rename(
   libconrep = V241180, #as above
   age = V241458x, #-2 = NA, 80+ = 80 or older
   education_lvl = V241465x, # 1-5 scale
-  income_total = V241566x, # 29 category variable 
+  income_total = V241566x, # 29 category variable - excludes PAPI respondents
   income_bracket = V241567x, # 1-6 scale
   gender = V241551, # 1 = man, 2 = woman
   leftrightself = V242438, # 0-10 scale
@@ -39,8 +39,8 @@ anes_24_for_model <- anes_24 %>% rename(
 ) %>%
   mutate(
     graduate = if_else(education_lvl == 4 | education_lvl == 5, 1, 0),
-    gender = factor(gender, levels = c(1, 2), labels = c('Male', 'Female'))
-         )  
+    gender = factor(gender, levels = c(1, 2), labels = c('Male', 'Female')),
+    income_bracket = factor(income_bracket, levels = 1:6, labels = c('<9,999', '10-29,999', '30-59,999', '60-99,999', '100,000-249,999', '>250,000')))  
 ```
 
 
@@ -66,7 +66,7 @@ sprintf('%d voters report themselves as equidistant on the liberal - conservativ
 ```
 
 ```{r}
-#setup survey weights as outlined in the codebook
+#setup survey weights as outlined in the codebook - for all post election respondents including PAPI
 des <- svydesign(
   ids = ~V240107c,
   strata = ~V240107d,
@@ -79,18 +79,19 @@ des <- svydesign(
 #make sure that filtering for invalid responses doesn't distort the weighting by specifying the subset we're interested in
 des_basic <- subset(des, turnout != -2 & between(libconself, 1, 7) & between(libcondem, 1, 7) & between(libconrep, 1, 7))
 
-
-des_controls <- subset(des, age >= 18 & 
-                         turnout != -2 & 
-                         !is.na(gender) & 
-                         income_total > 0 & 
-                         between(libconself, 1, 7) & between(libcondem, 1, 7) & between(libconrep, 1, 7))
+des_controls <- des %>% subset(age >= 18 & 
+            turnout != -2 & 
+            !is.na(gender) & 
+            !is.na(income_bracket) &
+            education_lvl > 0 &
+            between(libconself, 1, 7) & between(libcondem, 1, 7) & between(libconrep, 1, 7))
 
 #as above using the 0-10 rather than 1-7 scale
-des_controls_alt <- subset(des, age >= 18 & 
+des_controls_alt <- des %>% subset(age >= 18 & 
                              turnout != -2 & 
                              !is.na(gender) & 
-                             income_total > 0 & 
+                             !is.na(income_bracket) & 
+                             education_lvl > 0 &
                              between(leftrightself, 1, 10) & between(leftrightrep, 1, 10) & between(leftrightdem, 1, 10))
 ```
 
@@ -101,11 +102,11 @@ basic_lpm <- svyglm(turnout ~ distance_from_closest + distance_from_furthest, de
 summary(basic_lpm)
 
 #lpm with controls as in rivas
-full_lpm <- svyglm(turnout ~ distance_from_closest + distance_from_furthest + gender + graduate + income_total + age + I(age^2), design = des_controls)
+full_lpm <- svyglm(turnout ~ distance_from_closest + distance_from_furthest + gender + graduate + income_bracket + age + I(age^2), design = des_controls)
 summary(full_lpm)
 
 #lpm with 0-10 rather than 1-7 scale
-full_lpm_alt <- svyglm(turnout ~ distance_from_closest_alt + distance_from_furthest_alt + gender + graduate + income_total + age + I(age^2), design = des_controls_alt)
+full_lpm_alt <- svyglm(turnout ~ distance_from_closest_alt + distance_from_furthest_alt + gender + graduate + income_bracket + age + I(age^2), design = des_controls_alt)
 summary(full_lpm_alt)
 
 
@@ -126,7 +127,29 @@ anes_24_final_validated <- anes_24_final %>% left_join(anes_24_validation, join_
     .default = FALSE
   ))
 
+
 ```
+
+```{r}
+#weighting for validated version using updated data (in final version do validation at start!)
+des_val <- svydesign(
+  ids = ~V240107c,
+  strata = ~V240107d,
+  weights = ~V240107a,
+  data = anes_24_final_validated,
+  nest = TRUE) %>% subset(age >= 18 & 
+            turnout != -2 & 
+            !is.na(gender) & 
+            !is.na(income_bracket) & 
+            education_lvl > 0 &
+            validated == TRUE &
+            between(libconself, 1, 7) & between(libcondem, 1, 7) & between(libconrep, 1, 7))
+
+full_lpm_val <- svyglm(turnout ~ distance_from_closest + distance_from_furthest + gender + graduate + income_bracket + age + I(age^2), design = des_val)
+
+summary(full_lpm_val)
+```
+
 
 
 
