@@ -61,7 +61,7 @@ anes_24_final<- anes_24_for_model %>%
          )
          
 
-sprintf('%d voters report themselves as equidistant on the liberal - conservative scale', nrow(anes_24_filtered %>% filter(equidist == TRUE)))
+sprintf('%d voters report themselves as equidistant on the liberal - conservative scale', nrow(anes_24_final %>% filter(equidist == TRUE)))
 
 ```
 
@@ -69,7 +69,7 @@ sprintf('%d voters report themselves as equidistant on the liberal - conservativ
 #setup survey weights as outlined in the codebook - for all post election respondents including PAPI
 des <- svydesign(
   ids = ~V240107c,
-  strata = ~V240107d,
+  strata = ~V240107d,a
   weights = ~V240107a,
   data = anes_24_final,
   nest = TRUE
@@ -105,11 +105,12 @@ summary(basic_lpm)
 full_lpm <- svyglm(turnout ~ distance_from_closest + distance_from_furthest + gender + graduate + income_bracket + age + I(age^2), design = des_controls)
 summary(full_lpm)
 
+
+```
+```{r}
 #lpm with 0-10 rather than 1-7 scale
 full_lpm_alt <- svyglm(turnout ~ distance_from_closest_alt + distance_from_furthest_alt + gender + graduate + income_bracket + age + I(age^2), design = des_controls_alt)
 summary(full_lpm_alt)
-
-
 ```
 
 ```{r}
@@ -127,8 +128,16 @@ anes_24_final_validated <- anes_24_final %>% left_join(anes_24_validation, join_
     .default = FALSE
   ))
 
+```
+```{r}
+anes_24_final_validated %>% filter(validated == FALSE) %>% count(val_turnout24, turnout)
 
 ```
+
+```{r}
+
+```
+
 
 ```{r}
 #weighting for validated version using updated data (in final version do validation at start!)
@@ -149,6 +158,70 @@ full_lpm_val <- svyglm(turnout ~ distance_from_closest + distance_from_furthest 
 
 summary(full_lpm_val)
 ```
+```{r}
+#don't discard voters where validation attempted but failed/validation not attempted
+anes_24_final_validated_alt <- anes_24_final %>% left_join(anes_24_validation, join_by(case_id)) %>%
+  mutate(validated = case_when(
+    val_turnout24 == 4 & turnout == 1 ~ TRUE,
+    val_turnout24 == 3 & turnout == 0 ~ TRUE,
+    val_turnout24 == 2 ~ TRUE,
+    val_turnout24 == 1 ~ TRUE,
+    .default = FALSE
+  ))
+
+
+#weighting for validated version using updated data (in final version do validation at start!)
+des_val_alt <- svydesign(
+  ids = ~V240107c,
+  strata = ~V240107d,
+  weights = ~V240107a,
+  data = anes_24_final_validated_alt,
+  nest = TRUE) %>% subset(age >= 18 & 
+            turnout != -2 & 
+            !is.na(gender) & 
+            !is.na(income_bracket) & 
+            education_lvl > 0 &
+            validated == TRUE &
+            between(libconself, 1, 7) & between(libcondem, 1, 7) & between(libconrep, 1, 7))
+
+full_lpm_val_alt <- svyglm(turnout ~ distance_from_closest + distance_from_furthest + gender + graduate + income_bracket + age + I(age^2), design = des_val_alt)
+
+summary(full_lpm_val_alt)
+```
+```{r}
+library(modelsummary)
+
+models <- list(
+  "Model 1" = basic_lpm,
+  "Model 2" = full_lpm,
+  "Model 3" = full_lpm_val_alt
+)
+
+modelsummary(
+  models,
+  output   = "results_table.docx",
+  stars    = c("*" = .1, "**" = .05, "***" = .01),
+  statistic = "std.error",              # SEs in brackets beneath coefficients
+  fmt      = 3,                         # 3 decimal places
+  coef_rename = c(
+    "distance_from_closest"  = "Distance from closest candidate",
+    "distance_from_furthest" = "Distance from furthest candidate",
+    "genderFemale"           = "Female",
+    'income_bracket10-29,999' = 'Income sextile 2',
+    'income_bracket30-59,999' = 'Income sextile 3',
+    'income_bracket60-99,999' = 'Income sextile 4',
+    'income_bracket100,000-249,999' = 'Income sextile 5',
+    'income_bracket>250,000' = 'Income sextile 6',
+    "(Intercept)"            = "Constant"
+  ),
+  gof_map  = c("nobs", "r.squared"),    # only show N and R²
+  notes    = "Survey-weighted linear probability models. Taylor series standard errors in parentheses.",
+  title    = "Table 1: Determinants of turnout"
+)
+```
+
+
+
 
 
 
