@@ -66,7 +66,7 @@ anes_ts_transformed <- anes_ts %>% rename(all_of(var_rename)) %>%
 ```
 
 ```{r}
-# PSU variable not available for ts data - recalculate 24 to estimate effect
+# PSU variable not available for ts data so ignore clustering of standard errors (leads to understated errors)
 des_ts<- svydesign(
   ids = ~1,
   weights = ~ weighting,
@@ -74,47 +74,40 @@ des_ts<- svydesign(
 )
 
 #year-agnostic design specifying all the control variables for which we need a valid response
+des_ts_full <- des_ts %>% subset(age >= 1 & 
+                                 !is.na(gender) & 
+                                 !is.na(inc_bracket) &
+                                 between(education, 0, 6) &
+                                 between(libconself, 1, 7) &
+                                 between(libconrep, 1, 7) &
+                                 between(libcondem, 1, 7) &
+                                 between(turnout, 0, 1))
 ```
 
 ```{r}
-des_ts_full_alt <- des_ts %>% subset(age >= 1 & 
-                                 !is.na(gender) & 
-                                 !is.na(inc_bracket) &
-                                 between(education, 0, 6) &
-                                 between(libconself, 1, 7) &
-                                 between(libconrep, 1, 7) &
-                                 between(libcondem, 1, 7) &
-                                 between(turnout, 0, 1))
-des_24_alt <- des_ts_full_alt %>% subset(study_year == 2024)
+#specify survey design by year 
+des_24_full <- des_ts_full %>% subset(study_year == 2024)
+
+
 ```
 
-
 ```{r}
-des_24_full <- des_ts %>% subset(study_year == 2024 & 
-                                 age >= 1 & 
-                                 !is.na(gender) & 
-                                 !is.na(inc_bracket) &
-                                 between(education, 0, 6) &
-                                 between(libconself, 1, 7) &
+#version without controls for initial analysis 
+des_24_basic <- des_ts %>% subset(study_year == 2024 &
+                                  between(libconself, 1, 7) &
                                  between(libconrep, 1, 7) &
                                  between(libcondem, 1, 7) &
-                                 between(turnout, 0, 1))
-
-des_20_full <- des_ts %>% subset(study_year == 2020 & 
-                                 age >= 1 & 
-                                 !is.na(gender) & 
-                                 !is.na(inc_bracket) &
-                                 between(education, 0, 6) &
-                                 between(libconself, 1, 7) &
-                                 between(libconrep, 1, 7) &
-                                 between(libcondem, 1, 7) &
-                                 between(turnout, 0, 1))
+                                between(turnout, 0, 1))
                                  
+cdf_lpm_24_basic <- svyglm(turnout ~ distance_from_closest + distance_from_furthest, design = des_24_basic)
+summary(cdf_lpm_24_basic)
 ```
 
 ```{r}
 cdf_lpm_24 <- svyglm(turnout ~ distance_from_closest + distance_from_furthest + graduate + inc_bracket + gender + age + I(age^2), design = des_24_full)
 summary(cdf_lpm_24)
+
+
 ```
 
 
