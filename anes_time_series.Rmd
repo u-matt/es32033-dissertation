@@ -1,0 +1,50 @@
+---
+title: "anes_time_series.Rmd"
+output: html_notebook
+---
+
+```{r}
+#import needed libraries
+library(tidyverse)
+library(openxlsx)
+library(sandwich)
+library(lmtest)
+library(survey)
+```
+```{r}
+anes_ts <- read_csv('~/Documents/GitHub/es32033-dissertation/data/anes/anes_timeseries_cdf_csv_20260205.csv')
+```
+```{r}
+var_rename <- c(study_year = 'VCF0004',
+  case_id = 'VCF0006',
+  turnout = 'VCF0702',
+  age = 'VCF0101',
+  gender = 'VCF0104',
+  education = 'VCF0140',
+  inc_bracket = 'VCF0114',
+  libconself = 'VCF0803',
+  libcondem = 'VCF9088',
+  libconrep = 'VCF9096')
+
+anes_ts_transformed <- anes_ts %>% rename(all_of(var_rename)) %>%
+  mutate(
+        distance_from_dem_libcon = abs(libconself - libcondem),
+        distance_from_rep_libcon = abs(libconself - libconrep),
+        distance_from_closest = pmin(distance_from_dem_libcon, distance_from_rep_libcon),
+        distance_from_furthest = pmax(distance_from_dem_libcon, distance_from_rep_libcon),
+        
+        # assign 1 to graduates and 0 to non graduates - 6 is the level assigned to grads in the 6 category education var
+        graduate = ifelse(education == 6, 1, 0),
+        # 1 corresponds to male, 2 to female
+        gender = factor(gender, levels = c(1, 2), labels = c('Male', 'Female')),
+        # household income is divided into percentiles
+        inc_bracket = factor(inc_bracket, levels = 1:5, labels = c('0-16_percentile', '17-33_percentile',   
+                                                                   '34-67_percentile', '68-95_percentile',
+                                                                   '96-100_percentile'))
+        )
+  
+
+
+```
+
+
