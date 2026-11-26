@@ -11,12 +11,24 @@ library(sandwich)
 library(lmtest)
 library(survey)
 ```
+
+
 ```{r}
 anes_ts <- read_csv('~/Documents/GitHub/es32033-dissertation/data/anes/anes_timeseries_cdf_csv_20260205.csv')
 ```
 ```{r}
+VCF9096_2024_fix <- read.xlsx('~/Documents/GitHub/es32033-dissertation/data/anes/VCF9096_2024.xlsx')
+anes_ts <- anes_ts %>% rows_update(
+  VCF9096_2024_fix, by = c('VCF0004', 'VCF0006'), unmatched = 'error'
+)
+```
+
+
+
+```{r}
 var_rename <- c(study_year = 'VCF0004',
   case_id = 'VCF0006',
+  weighting = 'VCF0009z',
   turnout = 'VCF0702',
   age = 'VCF0101',
   gender = 'VCF0104',
@@ -35,6 +47,11 @@ anes_ts_transformed <- anes_ts %>% rename(all_of(var_rename)) %>%
         
         # assign 1 to graduates and 0 to non graduates - 6 is the level assigned to grads in the 6 category education var
         graduate = ifelse(education == 6, 1, 0),
+        turnout = case_when(
+          turnout == 1 ~ 0,
+          turnout == 2 ~ 1,
+          .default = NA
+          ),
         # 1 corresponds to male, 2 to female
         gender = factor(gender, levels = c(1, 2), labels = c('Male', 'Female')),
         # household income is divided into percentiles
@@ -46,5 +63,35 @@ anes_ts_transformed <- anes_ts %>% rename(all_of(var_rename)) %>%
 
 
 ```
+
+```{r}
+# PSU variable not available for ts data - recalculate 24 to estimate effect
+des_24 <- svydesign(
+  ids = ~1,
+  weights = ~ weighting,
+  data = anes_ts_transformed
+)
+
+des_24_full <- des_24 %>% subset(age >= 1 & 
+                                 !is.na(gender) & 
+                                 study_year == 2024 & 
+                                 !is.na(inc_bracket) &
+                                 between(education, 0, 6) &
+                                 between(libconself, 1, 7) &
+                                 between(libconrep, 1, 7) &
+                                 between(libcondem, 1, 7) &
+                                 between(turnout, 0, 1))
+                                 
+```
+
+```{r}
+comparison_lpm <- svyglm(turnout ~ distance_from_closest + distance_from_furthest + graduate + inc_bracket + gender + age + I(age^2), design = des_24_full)
+summary(full_lpm)
+summary(comparison_lpm)
+
+```
+
+
+
 
 
